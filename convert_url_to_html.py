@@ -2,7 +2,7 @@ from html_tools import catalog_number
 from html_tools import get_and_save_html_content
 import os
 def get_url_list(number):
-    with open(f'htmls/{number}/linkers', 'r', encoding='utf-8') as file:
+    with open(f'htmls/{number}/links', 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     unique_lines = list(set(lines))

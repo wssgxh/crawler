@@ -30,11 +30,11 @@ def get_availabe_links(web_page_sub_selection_path, html_content=False, file_pat
     elif html_content:
         soup = BeautifulSoup(html_content, 'html.parser')
 
-    linkers = []
+    links = []
     title_div = soup.find_all('div', id=lambda x: x and x.startswith('subject-'))
     for item in title_div:
         page_id = item['id'].split('-')[1]
-        linkers.append(f'{pre_fix}_{page_id}')
+        links.append(f'{pre_fix}_{page_id}')
 
     next_page_button = soup.find('input', {'type': 'button', 'value': '下一页 >'})
 
@@ -45,11 +45,11 @@ def get_availabe_links(web_page_sub_selection_path, html_content=False, file_pat
         next_page_value = onclick_value[start_index:end_index]
     else:
         next_page_value = False
-    linkers_str = '\n'.join(map(str, linkers))
-    with open(os.path.join(web_page_sub_selection_path, 'linkers'), 'a') as file:
-        file.write(linkers_str)
+    links_str = '\n'.join(map(str, links))
+    with open(os.path.join(web_page_sub_selection_path, 'links'), 'a') as file:
+        file.write(links_str)
 
-    return linkers, next_page_value
+    return links, next_page_value
 
 
 def run(driver, url):
