@@ -7,20 +7,21 @@ def get_url_list(number):
 
     unique_lines = list(set(lines))
 
-    formated_unique_lines = []
+    formatted_unique_lines = []
     for item in unique_lines:
 
         item = item.strip()
 
+        # if 2 urls in the same line
         if len(item) == 104:
             half_length = len(item) // 2
-            formated_unique_lines.append(item[:half_length])
-            formated_unique_lines.append(item[half_length:])
+            formatted_unique_lines.append(item[:half_length])
+            formatted_unique_lines.append(item[half_length:])
         else:
-            formated_unique_lines.append(item)
+            formatted_unique_lines.append(item)
 
-    print(len(formated_unique_lines))
-    return formated_unique_lines
+    print(len(formatted_unique_lines))
+    return formatted_unique_lines
 
 
 if __name__ == "__main__":
