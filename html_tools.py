@@ -1,5 +1,9 @@
 import os
 import chardet
+import threading
+from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
+import queue
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,9 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.common.exceptions import TimeoutException
 
-from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
-from functools import lru_cache
 
 from tools import split_list, create_folder
 
@@ -197,3 +199,107 @@ def get_and_save_html_content(urls, web_page_sub_selection, overwrite=False, wor
         # Wait for all tasks to complete
         for future in futures:
             future.result()
+
+
+class DriverPool:
+    def __init__(self, max_workers):
+        self.idle_drivers = queue.Queue(max_workers)
+        self.busy_drivers = []
+
+        for _ in range(max_workers):
+            chrome_options = Options()
+            chrome_options.add_argument('--headless')
+            driver = webdriver.Chrome(options=chrome_options)
+            self.idle_drivers.put(driver)
+
+        self.lock = threading.Lock()
+
+    def get_driver(self):
+        with self.lock:
+            if not self.idle_drivers.empty():
+                driver = self.idle_drivers.get()
+                self.busy_drivers.append(driver)
+                return driver
+            else:
+                return None
+
+    def release_driver(self, driver):
+        with self.lock:
+            if driver in self.busy_drivers:
+                self.busy_drivers.remove(driver)
+                self.idle_drivers.put(driver)
+
+
+def fetch_and_save_html_v2(url, web_page_sub_selection, overwrite, web_page_sub_selection_path, index, driver_pool):
+    driver = driver_pool.get_driver()
+
+    if driver is None:
+        print(f'No available driver. Skipping {url}')
+        return
+
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+
+        page_number = 1
+        next_page_button = True
+
+        file_name = url.split(f'{web_page_sub_selection}_')[1] + f'_{page_number:02}' + '.html'
+        file_path = os.path.join(web_page_sub_selection_path, file_name)
+
+        if not overwrite and os.path.exists(file_path):
+            print(f'{file_name} skipped')
+            return
+
+        driver.get(url)
+
+        # get all pages by clicking "下一页"
+        while next_page_button:
+            html_content = driver.page_source
+
+            with open(file_path, 'w', encoding='gbk') as file:
+                file.write(html_content)
+
+            wait = WebDriverWait(driver, 3)
+            try:
+                next_page_button = wait.until(
+                    ec.presence_of_element_located((By.XPATH, "//a[@class='next' and contains(text(), '下一页')]")))
+            except TimeoutException:
+                # can't find the button
+                break
+
+            next_page_button.click()
+            page_number += 1
+            file_name = url.split(f'{web_page_sub_selection}_')[1] + f'_{page_number:02}' + '.html'
+            file_path = os.path.join(web_page_sub_selection_path, file_name)
+
+        print(f'Successfully fetched and saved {page_number:02} HTML for {url}')
+
+    finally:
+        driver_pool.release_driver(driver)
+
+def get_and_save_html_content_v2(urls, web_page_sub_selection, overwrite=False, worker=1):
+    print(len(urls))
+    html_folder = 'htmls'
+    create_folder(html_folder)
+    web_page_sub_selection_path = os.path.join(html_folder, web_page_sub_selection)
+    create_folder(web_page_sub_selection_path)
+
+    driver_pool = DriverPool(max_workers=worker)
+
+    with ThreadPoolExecutor(max_workers=worker) as executor:
+        futures = []
+        for index, url in enumerate(urls):
+            future = executor.submit(fetch_and_save_html_v2, url, web_page_sub_selection, overwrite,
+                                     web_page_sub_selection_path, index, driver_pool)
+            futures.append(future)
+
+        # Wait for all tasks to complete
+        for future in futures:
+            future.result()
+
+    # Quit all drivers after all tasks are completed
+    for driver in driver_pool.idle_drivers.queue:
+        driver.quit()
+    for driver in driver_pool.busy_drivers:
+        driver.quit()
